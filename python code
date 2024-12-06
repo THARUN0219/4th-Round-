@@ -1,0 +1,50 @@
+import boto3
+import time
+
+# Initialize AWS clients
+dms_client = boto3.client('dms')
+cloudwatch_client = boto3.client('cloudwatch')
+
+# Define the replication task identifier
+replication_task_arn = 'arn:aws:dms:region:account-id:task:task-id'
+
+def log_to_cloudwatch(message, status):
+    # Send log to CloudWatch
+    cloudwatch_client.put_metric_data(
+        Namespace='DMSReplication',
+        MetricData=[
+            {
+                'MetricName': 'ReplicationStatus',
+                'Dimensions': [
+                    {
+                        'Name': 'ReplicationTask',
+                        'Value': replication_task_arn
+                    }
+                ],
+                'Value': 1 if status == 'successful' else 0,
+                'Unit': 'Count'
+            },
+        ]
+    )
+    print(f"Log sent to CloudWatch: {message}")
+
+def monitor_replication_task():
+    while True:
+        # Check the replication task status
+        response = dms_client.describe_replication_tasks(
+            Filters=[{'Name': 'replication-task-arn', 'Values': [replication_task_arn]}]
+        )
+        replication_task = response['ReplicationTasks'][0]
+        status = replication_task['Status']
+        
+        # Log status to CloudWatch
+        log_to_cloudwatch(f"Replication Task Status: {status}", status)
+        
+        if status == 'stopped' or status == 'failed':
+            break
+        
+        # Sleep for a while before checking again
+        time.sleep(60)
+
+# Start monitoring the replication task
+monitor_replication_task()
